@@ -84,17 +84,41 @@ export const SecurePlayer: React.FC<SecurePlayerProps> = ({ url, type, title }) 
     }, []);
 
     // Anti-PrintScreen / Blur Detection
+    // Anti-PrintScreen / Screen Record Detection (Focus Loss)
+    const [isWindowHidden, setIsWindowHidden] = useState(false);
+
     useEffect(() => {
         const handleVisibilityChange = () => {
-            if (document.hidden && containerRef.current) {
-                // Pause media if user switches tabs
+            const isHidden = document.hidden;
+            setIsWindowHidden(isHidden);
+
+            if (isHidden && containerRef.current) {
+                // IMMEDIATE ACTION: Pause media
                 const media = containerRef.current.querySelector('video, audio') as HTMLMediaElement;
-                if (media) media.pause();
+                if (media) {
+                    media.pause();
+                }
+            }
+        };
+
+        const handleKeydown = (e: KeyboardEvent) => {
+            // Block PrintScreen and common recording shortcuts
+            if (e.key === 'PrintScreen' || (e.ctrlKey && e.shiftKey && e.key === 'I')) {
+                // Nuke the display temporarily
+                setIsWindowHidden(true);
+                setTimeout(() => setIsWindowHidden(false), 2000); // Blink effect
+                e.preventDefault();
+                alert("Screenshots are not allowed.");
             }
         };
 
         document.addEventListener("visibilitychange", handleVisibilityChange);
-        return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("keydown", handleKeydown);
+
+        return () => {
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            window.removeEventListener("keydown", handleKeydown);
+        };
     }, []);
 
     return (
@@ -171,6 +195,28 @@ export const SecurePlayer: React.FC<SecurePlayerProps> = ({ url, type, title }) 
                             pointerEvents: 'none' // Crucial: allows controls to work, but blocks direct context menu on video area
                         }}
                     />
+
+                    {/* SCREEN RECORDING PROTECTION OVERLAY (Appears on focus loss) */}
+                    {isWindowHidden && (
+                        <div style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            background: 'black',
+                            zIndex: 100,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            flexDirection: 'column'
+                        }}>
+                            <AlertTriangle size={48} color="red" />
+                            <h3>Playback Paused</h3>
+                            <p>Please keep this window active to watch.</p>
+                        </div>
+                    )}
                 </>
             )}
 
