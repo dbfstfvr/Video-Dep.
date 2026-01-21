@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import axios from 'axios';
 import blockIDM from './middleware/blockIDM.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -48,29 +49,62 @@ app.post('/api/generate-token', (req, res) => {
 
 // 2. Serve the Stream (Proxied or Direct)
 // This is where IDM usually hits.
-app.get('/api/stream/:filename', (req, res) => {
+// 2. Serve the Stream (Proxied)
+// This is where IDM usually hits.
+// We use a wildcard to capture both the main playlist and subsequent segments/keys
+app.get('/api/stream/(.*)', async (req, res) => {
     const { token } = req.query;
+    const requestPath = req.params[0]; // Captures the group (.*)
 
-    // Validate Token (Simple timestamp check for demo)
-    if (!token) {
-        return res.status(403).json({ error: 'Missing token' });
+    // Use a fixed upstream base for this demo
+    // In a real app, you might map 'video123' to a specific folder/bucket URL
+    const upstreamBase = 'https://test-streams.mux.dev/x36xhzz';
+
+    // Map our 'video123.m3u8' to the actual upstream filename 'x36xhzz.m3u8'
+    // Everything else (segments) is passed through as-is
+    let upstreamPath = requestPath;
+    if (requestPath.endsWith('video123.m3u8')) {
+        upstreamPath = 'x36xhzz.m3u8';
+
+        // Validate Token ONLY for the initial playlist request
+        // Segments won't have the token, but are protected by the Referer check in blockIDM
+        if (!token) {
+            return res.status(403).json({ error: 'Missing token' });
+        }
     }
 
-    // HERE is where the magic happens.
-    // Because we used `app.use('/api/stream', blockIDM)`, 
-    // IDM is ALREADY blocked before reaching this code.
+    const upstreamUrl = `${upstreamBase}/${upstreamPath}`;
 
-    // If we are here, it's a browser (or a clever bot).
+    console.log(`🔄 Proxying: ${requestPath} -> ${upstreamUrl}`);
 
-    console.log(`✅ Authorized access to stream: ${req.params.filename}`);
+    try {
+        const response = await axios({
+            method: 'get',
+            url: upstreamUrl,
+            responseType: 'stream',
+            // Optional: Pass headers if needed, but usually not for public sources
+            // headers: { 'Referer': '...' } 
+        });
 
-    // In a real scenario, you stream the file content here.
-    // For this demo, we'll redirect to a public sample HLS stream 
-    // BUT only if they passed the IDM check.
-    // Ideally, you pipe the data: `readStream.pipe(res)` so URL is never exposed.
+        // Forward important headers
+        if (response.headers['content-type']) {
+            res.set('Content-Type', response.headers['content-type']);
+        }
+        if (response.headers['content-length']) {
+            res.set('Content-Length', response.headers['content-length']);
+        }
 
-    // Redirecting to a sample HLS stream for testing
-    res.redirect('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8');
+        // Pipe the stream to the client
+        response.data.pipe(res);
+
+    } catch (err) {
+        console.error(`❌ Proxy Error (${upstreamUrl}):`, err.message);
+        if (err.response) {
+            res.status(err.response.status).send(err.response.statusText);
+        } else {
+            res.status(500).send('Stream Proxy Failed');
+        }
+    }
 });
 
 // Start Server

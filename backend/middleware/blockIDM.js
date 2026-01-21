@@ -19,7 +19,8 @@ const blockIDM = (req, res, next) => {
         'FDM',
         'EagleGet',
         'Free Download Manager',
-        'DownloadAccelerator'
+        'DownloadAccelerator',
+        'PostmanRuntime'
     ];
 
     // 2. Check if User-Agent matches any blocked signature
@@ -27,25 +28,33 @@ const blockIDM = (req, res, next) => {
         userAgent.toLowerCase().includes(agent.toLowerCase())
     );
 
-    // 3. Strict Referer Check (Optional but recommended for media)
-    // In production, ensure this matches your actual domain
-    const allowedDomain = 'localhost'; // Change this to your domain e.g. 'yoursite.com'
-    const isInvalidReferer = !referer || !referer.includes(allowedDomain);
-
-    // NOTE: IDM often sends requests with NO Referer or a fake one.
-    // If you are serving an API/Stream, a missing referer is highly suspicious for a browser request.
-
     if (isBlockedAgent) {
-        console.log(`🚫 IDM Blocked! IP: ${req.ip} | Agent: ${userAgent}`);
+        console.log(`🚫 IDM Blocked [User-Agent]: ${req.ip} | ${userAgent}`);
         return res.status(403).json({
             error: 'Access Denied',
             message: 'Download Managers are not allowed. Please use the browser player.'
         });
     }
 
-    // 4. (Advanced) Thread/Connection Limiting - Conceptual
-    // If you see 10+ connections from same IP for same file in 1 second, it's IDM.
-    // This requires a shared state (Redis/Memory) not merely this middleware.
+    // 3. Strict Referer Check
+    // Browsers navigating to a page don't always have referer, BUT:
+    // This middleware is applied to /api/stream endpoints, which act as sub-resources (fetch/XHR).
+    // These MUST have a Referer from the hosting page.
+    const allowedDomain = 'localhost'; // Change this to your domain in production
+    if (!referer || !referer.includes(allowedDomain)) {
+        console.log(`🚫 IDM Blocked [Missing/Invalid Referer]: ${req.ip} | Referer: ${referer || 'None'}`);
+        return res.status(403).json({
+            error: 'Access Denied',
+            message: 'Invalid Referer. Direct access is not allowed.'
+        });
+    }
+
+    // 4. Block HEAD Requests
+    // IDM and others often send a HEAD request first to check file size/type.
+    if (req.method === 'HEAD') {
+        console.log(`🚫 IDM Blocked [HEAD Request]: ${req.ip}`);
+        return res.status(405).end();
+    }
 
     next();
 };

@@ -16,6 +16,7 @@ export const SecurePlayer: React.FC<SecurePlayerProps> = ({ url, type, title }) 
 
     // Watermark Animation State
     const [watermarkPos, setWatermarkPos] = useState({ top: '10%', left: '10%' });
+    const [isWindowHidden, setIsWindowHidden] = useState(false);
 
     useEffect(() => {
         let isMounted = true;
@@ -83,9 +84,41 @@ export const SecurePlayer: React.FC<SecurePlayerProps> = ({ url, type, title }) 
         return () => clearInterval(interval);
     }, []);
 
-    // Anti-PrintScreen / Blur Detection
-    // Anti-PrintScreen / Screen Record Detection (Focus Loss)
-    const [isWindowHidden, setIsWindowHidden] = useState(false);
+    // -------------------------------------------
+    // 🛡️ ANTI-RECORDING: INACTIVITY GUARD
+    // -------------------------------------------
+    const [isIdle, setIsIdle] = useState(false);
+    const idleTimerRef = useRef<number | null>(null);
+    const IDLE_TIMEOUT = 20000; // 20 seconds
+
+    const resetIdleTimer = () => {
+        if (isIdle) {
+            setIsIdle(false);
+        }
+
+        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+
+        idleTimerRef.current = window.setTimeout(() => {
+            setIsIdle(true);
+            if (videoRef.current) {
+                videoRef.current.pause(); // Pause video
+            }
+        }, IDLE_TIMEOUT);
+    };
+
+    useEffect(() => {
+        // Track user activity
+        const activities = ['mousemove', 'keydown', 'click', 'scroll'];
+        activities.forEach(event => window.addEventListener(event, resetIdleTimer));
+
+        resetIdleTimer(); // Start timer
+
+        return () => {
+            activities.forEach(event => window.removeEventListener(event, resetIdleTimer));
+            if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+        };
+    }, [isIdle]);
+    // -------------------------------------------
 
     useEffect(() => {
         const handleVisibilityChange = () => {
@@ -196,8 +229,8 @@ export const SecurePlayer: React.FC<SecurePlayerProps> = ({ url, type, title }) 
                         }}
                     />
 
-                    {/* SCREEN RECORDING PROTECTION OVERLAY (Appears on focus loss) */}
-                    {isWindowHidden && (
+                    {/* SCREEN RECORDING PROTECTION OVERLAY (Appears on focus loss OR Inactivity) */}
+                    {(isWindowHidden || isIdle) && (
                         <div style={{
                             position: 'absolute',
                             top: 0,
