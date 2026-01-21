@@ -11,9 +11,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3000;
 
-// Enable CORS for frontend (assuming Vite runs on 5173)
+// Enable CORS for frontend (Allow all origins for Vercel/Localhost)
 app.use(cors({
-    origin: 'http://localhost:5173', // Allow your React Frontend
+    origin: true, // Reflects the request origin, effectively allowing all
     credentials: true
 }));
 

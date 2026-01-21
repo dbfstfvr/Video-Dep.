@@ -79,10 +79,15 @@ export const SecurePlayer: React.FC<SecurePlayerProps> = ({ url, type, title }) 
                     if (isMounted) setLoading(false);
                 }
 
-            } catch (err) {
+            } catch (err: any) {
                 console.error("Secure Setup Failed:", err);
                 if (isMounted) {
-                    setError("Security negotiation failed. Please disable ad-blockers/IDM.");
+                    // Differentiate between Network Error (likely CORS or Backend Down) and API Error
+                    if (err.message === "Failed to fetch" || err.name === 'TypeError') {
+                        setError("Connection Error: Cannot reach security server. Check your internet or backend status.");
+                    } else {
+                        setError("Security negotiation failed. Please disable ad-blockers/IDM.");
+                    }
                     setLoading(false);
                 }
             }
