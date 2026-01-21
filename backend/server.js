@@ -96,18 +96,33 @@ app.get('/api/stream', async (req, res) => {
         }
 
         // Standard File Proxy (MP4, Audio, or HLS Segment)
+        // CRITICAL: Forward Range Headers for Video Seeking
+        const headers = {};
+        if (req.headers.range) {
+            headers['Range'] = req.headers.range;
+        }
+
+        // Use a generic Browser UA to avoid filtering by upstream
+        headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+
         const response = await axios({
             method: 'get',
             url: upstreamUrl,
-            responseType: 'stream'
+            responseType: 'stream',
+            headers: headers,
+            validateStatus: (status) => status >= 200 && status < 300 // Accept 206
         });
 
-        if (response.headers['content-type']) {
-            res.set('Content-Type', response.headers['content-type']);
-        }
-        if (response.headers['content-length']) {
-            res.set('Content-Length', response.headers['content-length']);
-        }
+        // Forward Vital Headers for Playback
+        const headerKeys = ['content-range', 'accept-ranges', 'content-length', 'content-type'];
+        headerKeys.forEach(key => {
+            if (response.headers[key]) {
+                res.set(key, response.headers[key]);
+            }
+        });
+
+        // Forward the upstream status (200 or 206)
+        res.status(response.status);
 
         response.data.pipe(res);
 
