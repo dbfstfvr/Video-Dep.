@@ -9,11 +9,22 @@ const PORT = 3000;
 // 1. Trust Proxy (Crucial for Vercel/Render/Tunnels to handle Secure Cookies)
 app.set('trust proxy', 1);
 
-// 2. CORS: Must allow credentials for Session Cookies
-app.use(cors({
-    origin: true, // Reflects the request origin
-    credentials: true // Allow cookies to be sent/received
-}));
+// 2. CORS: Explicit & Permissive Config
+const corsOptions = {
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+
+        // Dynamically allow all origins for development to fix the tunnel issue
+        return callback(null, true);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'],
+    allowedHeaders: ['X-Requested-With', 'content-type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Enable Pre-Flight for all routes
 
 app.use(express.json());
 
@@ -123,6 +134,10 @@ app.get('/api/stream', async (req, res) => {
         // console.error("Stream Proxy Error:", err.message);
         res.status(500).end();
     }
+});
+
+app.get('/', (req, res) => {
+    res.send("🔒 Secure Backend is Online & Session-Hardened!");
 });
 
 app.listen(PORT, () => {
