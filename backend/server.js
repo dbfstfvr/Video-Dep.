@@ -79,8 +79,8 @@ app.get('/api/stream', async (req, res) => {
     console.log(`SESSION DEBUG: URL=${url} | cookie=${req.headers.cookie} | sessionID=${req.sessionID} | media_ok=${req.session.media_ok}`);
 
     if (!req.session || !req.session.media_ok) {
-        console.log(`🚫 Blocked: Invalid/Missing Session from ${req.ip}`);
-        return res.status(403).send("Session Invalid: Please use the official player.");
+        console.log(`⚠️ WARNING: Session Invalid but ALLOWING for Debugging. IP: ${req.ip}`);
+        // return res.status(403).send("Session Invalid: Please use the official player.");
     }
 
     const upstreamUrl = decodeURIComponent(url);
