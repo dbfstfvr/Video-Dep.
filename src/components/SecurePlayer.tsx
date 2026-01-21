@@ -18,82 +18,40 @@ export const SecurePlayer: React.FC<SecurePlayerProps> = ({ url, type, title }) 
     const [watermarkPos, setWatermarkPos] = useState({ top: '10%', left: '10%' });
     const [isWindowHidden, setIsWindowHidden] = useState(false);
 
-    const [proxiedUrl, setProxiedUrl] = useState<string | null>(null);
-    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+    // Simplified Player: Direct URL (Backend Removed)
 
     useEffect(() => {
         let isMounted = true;
         setLoading(true);
         setError(null);
-        setProxiedUrl(null);
 
-        const setupSecureStream = async () => {
-            try {
-                // 1. Get Security Token from our Backend
-                const tokenRes = await fetch(`${BACKEND_URL}/api/generate-token`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
+        const isHls = url.includes('.m3u8');
 
-                if (!tokenRes.ok) throw new Error("Failed to secure stream session");
-
-                const { token } = await tokenRes.json();
-
-                // 2. Construct Proxy URL
-                // The backend will fetch the `url` (Hostinger) and pipe it to us,
-                // while enforcing IDM blocking (Referer/User-Agent checks).
-                const secureStreamUrl = `${BACKEND_URL}/api/stream?token=${token}&url=${encodeURIComponent(url)}`;
-                setProxiedUrl(secureStreamUrl);
-
-                // 3. Initialize Player
-                const isHls = url.includes('.m3u8');
-
-                if (type === 'video' && isHls) {
-                    if (Hls.isSupported()) {
-                        const hls = new Hls({
-                            xhrSetup: () => {
-                                // Optional: Custom headers if backend needs them
-                            }
-                        });
-
-                        if (videoRef.current) {
-                            hls.loadSource(secureStreamUrl);
-                            hls.attachMedia(videoRef.current);
-                            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                                if (isMounted) setLoading(false);
-                            });
-                            hls.on(Hls.Events.ERROR, (_, data) => {
-                                console.error("HLS Error:", data);
-                                if (data.fatal && isMounted) setError("Stream loading failed");
-                            });
-                        }
-                    } else if (videoRef.current && videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
-                        // Native HLS (Safari)
-                        videoRef.current.src = secureStreamUrl;
-                        videoRef.current.addEventListener('loadedmetadata', () => {
-                            if (isMounted) setLoading(false);
-                        });
-                    }
-                } else {
-                    // Standard MP4/Audio Fallback via Proxy
+        if (type === 'video' && isHls) {
+            if (Hls.isSupported()) {
+                const hls = new Hls();
+                if (videoRef.current) {
+                    hls.loadSource(url);
+                    hls.attachMedia(videoRef.current);
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        if (isMounted) setLoading(false);
+                    });
+                    hls.on(Hls.Events.ERROR, (_, data) => {
+                        console.error("HLS Error:", data);
+                        if (data.fatal && isMounted) setError("Stream loading failed");
+                    });
+                }
+            } else if (videoRef.current && videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+                // Native HLS (Safari)
+                videoRef.current.src = url;
+                videoRef.current.addEventListener('loadedmetadata', () => {
                     if (isMounted) setLoading(false);
-                }
-
-            } catch (err: any) {
-                console.error("Secure Setup Failed:", err);
-                if (isMounted) {
-                    // Differentiate between Network Error (likely CORS or Backend Down) and API Error
-                    if (err.message === "Failed to fetch" || err.name === 'TypeError') {
-                        setError("Connection Error: Cannot reach security server. Check your internet or backend status.");
-                    } else {
-                        setError("Security negotiation failed. Please disable ad-blockers/IDM.");
-                    }
-                    setLoading(false);
-                }
+                });
             }
-        };
-
-        setupSecureStream();
+        } else {
+            // Standard MP4/Audio
+            if (isMounted) setLoading(false);
+        }
 
         return () => {
             isMounted = false;
@@ -203,12 +161,12 @@ export const SecurePlayer: React.FC<SecurePlayerProps> = ({ url, type, title }) 
                 </div>
             )}
 
-            {!loading && proxiedUrl && (
+            {!loading && (
                 <>
                     {type === 'video' ? (
                         <video
                             ref={videoRef}
-                            src={!url.includes('.m3u8') ? proxiedUrl : undefined}
+                            src={!url.includes('.m3u8') ? url : undefined}
                             controls
                             controlsList="nodownload noremoteplayback" // Security: Block download UI
                             disablePictureInPicture // Security: Prevent PiP which might bypass overlay
@@ -216,7 +174,7 @@ export const SecurePlayer: React.FC<SecurePlayerProps> = ({ url, type, title }) 
                         />
                     ) : (
                         <audio
-                            src={proxiedUrl}
+                            src={url}
                             controls
                             controlsList="nodownload"
                             style={{ width: '100%', display: 'block', padding: '10px' }}
