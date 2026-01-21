@@ -19,6 +19,12 @@ app.use(cors({
 
 app.use(express.json());
 
+// DEBUG: Log all requests
+app.use((req, res, next) => {
+    console.log(`[${req.method}] ${req.url} | Origin: ${req.get('Origin')} | Referer: ${req.get('Referer')}`);
+    next();
+});
+
 // -------------------------------------------------------------
 // 🛡️ SECURITY LAYER: Apply IDM Blocker to Media Routes
 // -------------------------------------------------------------
