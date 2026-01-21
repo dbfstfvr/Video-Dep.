@@ -53,41 +53,55 @@ app.post('/api/generate-token', (req, res) => {
 // 2. Serve the Stream (Proxied)
 // This is where IDM usually hits.
 // We use a wildcard to capture both the main playlist and subsequent segments/keys
-app.get(/^\/api\/stream\/(.*)$/, async (req, res) => {
-    const { token } = req.query;
-    const requestPath = req.params[0]; // Captures the regex group (.*)
+// 2. Serve the Stream (Generic Proxy)
+app.get('/api/stream', async (req, res) => {
+    const { token, url } = req.query;
 
-    // Use a fixed upstream base for this demo
-    // In a real app, you might map 'video123' to a specific folder/bucket URL
-    const upstreamBase = 'https://test-streams.mux.dev/x36xhzz';
-
-    // Map our 'video123.m3u8' to the actual upstream filename 'x36xhzz.m3u8'
-    // Everything else (segments) is passed through as-is
-    let upstreamPath = requestPath;
-    if (requestPath.endsWith('video123.m3u8')) {
-        upstreamPath = 'x36xhzz.m3u8';
-
-        // Validate Token ONLY for the initial playlist request
-        // Segments won't have the token, but are protected by the Referer check in blockIDM
-        if (!token) {
-            return res.status(403).json({ error: 'Missing token' });
-        }
+    if (!token || !url) {
+        return res.status(403).json({ error: 'Missing token or url' });
     }
 
-    const upstreamUrl = `${upstreamBase}/${upstreamPath}`;
+    // In a real app, verify the token here.
 
-    console.log(`🔄 Proxying: ${requestPath} -> ${upstreamUrl}`);
+    const upstreamUrl = decodeURIComponent(url);
+    console.log(`🔄 Proxying to: ${upstreamUrl}`);
 
     try {
+        // Check if it's an HLS playlist
+        if (upstreamUrl.includes('.m3u8')) {
+            const response = await axios({
+                method: 'get',
+                url: upstreamUrl,
+                responseType: 'text'
+            });
+
+            let originalManifest = response.data;
+            const baseUrl = upstreamUrl.substring(0, upstreamUrl.lastIndexOf('/') + 1);
+
+            let modifiedManifest = originalManifest.split('\n').map(line => {
+                if (line.trim() && !line.trim().startsWith('#')) {
+                    // It's a segment/playlist path
+                    // We need to resolve it to an absolute URL if it is relative
+                    let absoluteSegmentUrl = line.startsWith('http') ? line : baseUrl + line;
+
+                    // Rewrite it to point back to OUR proxy
+                    // We must encode the segment URL so it passes correctly as a param
+                    return `${req.protocol}://${req.get('host')}/api/stream?token=${token}&url=${encodeURIComponent(absoluteSegmentUrl)}`;
+                }
+                return line;
+            }).join('\n');
+
+            res.set('Content-Type', 'application/vnd.apple.mpegurl');
+            return res.send(modifiedManifest);
+        }
+
+        // Standard File Proxy (MP4, Audio, or HLS Segment)
         const response = await axios({
             method: 'get',
             url: upstreamUrl,
-            responseType: 'stream',
-            // Optional: Pass headers if needed, but usually not for public sources
-            // headers: { 'Referer': '...' } 
+            responseType: 'stream'
         });
 
-        // Forward important headers
         if (response.headers['content-type']) {
             res.set('Content-Type', response.headers['content-type']);
         }
@@ -95,16 +109,11 @@ app.get(/^\/api\/stream\/(.*)$/, async (req, res) => {
             res.set('Content-Length', response.headers['content-length']);
         }
 
-        // Pipe the stream to the client
         response.data.pipe(res);
 
     } catch (err) {
-        console.error(`❌ Proxy Error (${upstreamUrl}):`, err.message);
-        if (err.response) {
-            res.status(err.response.status).send(err.response.statusText);
-        } else {
-            res.status(500).send('Stream Proxy Failed');
-        }
+        console.error(`❌ Proxy Error:`, err.message);
+        res.status(500).send('Stream Proxy Failed');
     }
 });
 
