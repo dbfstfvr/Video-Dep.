@@ -7,7 +7,8 @@
         "dev": "vite",
         "build": "tsc && vite build",
         "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-        "preview": "vite preview"
+        "preview": "vite preview",
+        "server": "node backend/server.js"
     },
     "dependencies": {
         "@supabase/supabase-js": "^2.90.1",
@@ -15,6 +16,7 @@
         "cors": "^2.8.5",
         "dotenv": "^17.2.3",
         "express": "^5.2.1",
+        "express-session": "^1.18.2",
         "hls.js": "^1.6.15",
         "lucide-react": "^0.344.0",
         "react": "^18.2.0",
