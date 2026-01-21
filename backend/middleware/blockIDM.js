@@ -4,7 +4,6 @@
  */
 const blockIDM = (req, res, next) => {
     const userAgent = req.get('User-Agent') || '';
-    const referer = req.get('Referer') || '';
 
     // 1. List of known Download Manager Signatures
     const blockedAgents = [
@@ -41,12 +40,21 @@ const blockIDM = (req, res, next) => {
     // This middleware is applied to /api/stream endpoints, which act as sub-resources (fetch/XHR).
     // These MUST have a Referer from the hosting page.
     // Allow localhost and vercel deployments
+    const referer = req.get('Referer') || req.get('Origin') || '';
     if (!referer) {
-        console.log(`🚫 IDM Blocked [Missing Referer]: ${req.ip}`);
-        return res.status(403).json({
-            error: 'Access Denied',
-            message: 'Invalid Referer. Direct access is not allowed.'
-        });
+        // Special Case: Some tunnels/proxies strip Referer.
+        // If Sec-Fetch-Dest is 'video' or 'audio' or 'empty', we might be lenient if User-Agent is valid.
+        const likelyBrowser = !isBlockedAgent && req.get('Sec-Fetch-Mode') === 'cors';
+
+        if (likelyBrowser) {
+            console.log(`⚠️ IDM Check: Missing Referer but valid Fetch Mode. Allowed for Tunnel: ${req.ip}`);
+        } else {
+            console.log(`🚫 IDM Blocked [Missing Referer & Origin]: ${req.ip} | UA: ${userAgent}`);
+            return res.status(403).json({
+                error: 'Access Denied',
+                message: 'Invalid Security Headers. Please reload.'
+            });
+        }
     }
     // Optional: Add specific domain check if needed
     // const allowedDomains = ['localhost', 'vercel.app', 'your-domain.com'];

@@ -22,9 +22,8 @@ app.use(express.json());
 // -------------------------------------------------------------
 // 🛡️ SECURITY LAYER: Apply IDM Blocker to Media Routes
 // -------------------------------------------------------------
-// Apply strictly to streaming or token generation endpoints
+// Apply strictly to streaming endpoint only
 app.use('/api/stream', blockIDM);
-app.use('/api/generate-token', blockIDM);
 
 
 // -------------------------------------------------------------
