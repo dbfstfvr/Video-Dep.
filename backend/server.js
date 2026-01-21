@@ -76,6 +76,8 @@ app.get('/api/stream', async (req, res) => {
 
     // 🛑 HARDENING: SESSION CHECK
     // If the request doesn't include the valid session cookie (e.g. IDM), BLOCK IT.
+    console.log(`SESSION DEBUG: URL=${url} | cookie=${req.headers.cookie} | sessionID=${req.sessionID} | media_ok=${req.session.media_ok}`);
+
     if (!req.session || !req.session.media_ok) {
         console.log(`🚫 Blocked: Invalid/Missing Session from ${req.ip}`);
         return res.status(403).send("Session Invalid: Please use the official player.");
