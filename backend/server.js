@@ -47,14 +47,15 @@ app.post('/api/generate-token', (req, res) => {
     });
 });
 
-// 2. Serve the Stream (Proxied or Direct)
-// This is where IDM usually hits.
 // 2. Serve the Stream (Proxied)
 // This is where IDM usually hits.
 // We use a wildcard to capture both the main playlist and subsequent segments/keys
-app.get('/api/stream/(.*)', async (req, res) => {
+// 2. Serve the Stream (Proxied)
+// This is where IDM usually hits.
+// We use a wildcard to capture both the main playlist and subsequent segments/keys
+app.get(/^\/api\/stream\/(.*)$/, async (req, res) => {
     const { token } = req.query;
-    const requestPath = req.params[0]; // Captures the group (.*)
+    const requestPath = req.params[0]; // Captures the regex group (.*)
 
     // Use a fixed upstream base for this demo
     // In a real app, you might map 'video123' to a specific folder/bucket URL
