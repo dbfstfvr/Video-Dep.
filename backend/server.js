@@ -35,8 +35,8 @@ app.use(session({
     resave: false,
     saveUninitialized: true,
     cookie: {
-        secure: true, // REQUIRED for SameSite: 'none' (HTTPS)
-        sameSite: 'none', // REQUIRED for cross-site (Vercel -> Backend)
+        secure: false, // Set to FALSE for Localhost (HTTP)
+        sameSite: 'lax', // Relaxed for local dev
         maxAge: 3600 * 1000 // 1 Hour
     }
 }));
