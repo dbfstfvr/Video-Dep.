@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import Hls from 'hls.js';
-import axios from 'axios';
+
 
 interface SecurePlayerProps {
     url: string;
@@ -19,80 +19,31 @@ export const SecurePlayer: React.FC<SecurePlayerProps> = ({ url, type, title }) 
     const [watermarkPos, setWatermarkPos] = useState({ top: '10%', left: '10%' });
     const [isWindowHidden, setIsWindowHidden] = useState(false);
 
-    const [proxiedUrl, setProxiedUrl] = useState<string | null>(null);
-    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
-
-    // 1. Session Negotiation
+    // Simplified Player: Direct URL (Backend Removed)
     useEffect(() => {
         let isMounted = true;
         setLoading(true);
         setError(null);
-        setProxiedUrl(null);
-
-        const setupSecureSession = async () => {
-            try {
-                // Initial Handshake to set Session Cookie
-                // Ensure 'withCredentials' is true so the browser stores the cookie for our backend domain
-                const response = await axios.post(`${BACKEND_URL}/api/init-session`, {}, {
-                    withCredentials: true
-                });
-
-                if (response.data.success) {
-                    // Point to our secure proxy
-                    // The <video> tag will send the 'connect.sid' cookie automatically with this GET request
-                    const secureUrl = `${BACKEND_URL}/api/stream?url=${encodeURIComponent(url)}`;
-                    if (isMounted) setProxiedUrl(secureUrl);
-                } else {
-                    throw new Error("Session refused");
-                }
-            } catch (err: any) {
-                console.error("Session Error:", err);
-                if (isMounted) {
-                    setError("Security negotiation failed. Please enable cookies and disable download managers.");
-                    setLoading(false);
-                }
-            }
-        };
-
-        setupSecureSession();
-
-        return () => { isMounted = false; };
-    }, [url, BACKEND_URL]);
-
-    // 2. Player Initialization (Once Proxy URL is ready)
-    useEffect(() => {
-        if (!proxiedUrl) return;
-
-        let isMounted = true;
 
         const isHls = url.includes('.m3u8');
 
         if (type === 'video' && isHls) {
-            // HLS with Session Cookies
             if (Hls.isSupported()) {
-                const hls = new Hls({
-                    xhrSetup: (xhr) => {
-                        xhr.withCredentials = true; // CRITICAL: Send Session Cookie for segments
-                    }
-                });
-
+                const hls = new Hls();
                 if (videoRef.current) {
-                    hls.loadSource(proxiedUrl);
+                    hls.loadSource(url);
                     hls.attachMedia(videoRef.current);
                     hls.on(Hls.Events.MANIFEST_PARSED, () => {
                         if (isMounted) setLoading(false);
                     });
                     hls.on(Hls.Events.ERROR, (_, data) => {
+                        console.error("HLS Error:", data);
                         if (data.fatal && isMounted) setError("Stream loading failed");
                     });
                 }
-
-                return () => {
-                    hls.destroy();
-                };
             } else if (videoRef.current && videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
-                // Native HLS (Safari handles cookies automatically)
-                videoRef.current.src = proxiedUrl;
+                // Native HLS (Safari)
+                videoRef.current.src = url;
                 videoRef.current.addEventListener('loadedmetadata', () => {
                     if (isMounted) setLoading(false);
                 });
@@ -102,7 +53,10 @@ export const SecurePlayer: React.FC<SecurePlayerProps> = ({ url, type, title }) 
             if (isMounted) setLoading(false);
         }
 
-    }, [proxiedUrl, type, url]);
+        return () => {
+            isMounted = false;
+        };
+    }, [url, type]);
 
     // Dynamic Watermark Animation
     useEffect(() => {
@@ -207,12 +161,12 @@ export const SecurePlayer: React.FC<SecurePlayerProps> = ({ url, type, title }) 
                 </div>
             )}
 
-            {!loading && proxiedUrl && (
+            {!loading && (
                 <>
                     {type === 'video' ? (
                         <video
                             ref={videoRef}
-                            src={!url.includes('.m3u8') ? proxiedUrl : undefined}
+                            src={!url.includes('.m3u8') ? url : undefined}
                             controls
                             controlsList="nodownload noremoteplayback" // Security: Block download UI
                             disablePictureInPicture // Security: Prevent PiP which might bypass overlay
@@ -220,7 +174,7 @@ export const SecurePlayer: React.FC<SecurePlayerProps> = ({ url, type, title }) 
                         />
                     ) : (
                         <audio
-                            src={proxiedUrl}
+                            src={url}
                             controls
                             controlsList="nodownload"
                             style={{ width: '100%', display: 'block', padding: '10px' }}
